@@ -1,0 +1,292 @@
+import unittest
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.edge.service import Service as EdgeService
+from webdriver_manager.microsoft import EdgeChromiumDriverManager
+import shutil
+import os
+from selenium.common.exceptions import WebDriverException
+import time
+import urllib.request
+import urllib.error
+
+class TestBreakingBadCRUD(unittest.TestCase):
+    
+    @classmethod
+    def setUpClass(cls):
+        """Configurar el driver de Selenium antes de ejecutar los tests"""
+        print("\n" + "="*60)
+        print("CONFIGURANDO WEBDRIVER PARA SELENIUM")
+        print("="*60 + "\n")
+        
+        # Primero intentar Edge (Chromium) usando un msedgedriver local
+        print("[1/3] Buscando Microsoft Edge Driver (msedgedriver)...")
+        
+        edge_options = webdriver.EdgeOptions()
+        edge_options.add_argument("--no-sandbox")
+        edge_options.add_argument("--disable-dev-shm-usage")
+        edge_options.add_argument("--disable-gpu")
+        edge_options.add_argument("--remote-debugging-port=9222")
+        # Descomenta para ejecutar sin interfaz gráfica (headless)
+        # edge_options.add_argument("--headless=new")
+
+        # Buscar msedgedriver local en PATH o en rutas comunes
+        local_edge = shutil.which('msedgedriver')
+        common_edge_paths = [
+            r'C:\msedgedriver\msedgedriver.exe',
+            r'C:\Program Files\msedgedriver.exe',
+            r'C:\Program Files (x86)\msedgedriver.exe',
+            r'C:\xampp\msedgedriver.exe',
+            os.path.join(os.path.dirname(__file__), '..', 'msedgedriver.exe')
+        ]
+        
+        if not local_edge:
+            for p in common_edge_paths:
+                if os.path.exists(p):
+                    local_edge = p
+                    print(f"   ✓ Encontrado en: {p}")
+                    break
+
+        if local_edge:
+            try:
+                edge_service = EdgeService(local_edge)
+                cls.driver = webdriver.Edge(service=edge_service, options=edge_options)
+                print("   ✓ Microsoft Edge iniciado correctamente\n")
+                cls.driver.implicitly_wait(10)
+                # Configurar BASE_URL desde entorno o por defecto
+                cls.base_url = os.environ.get("BASE_URL", "http://127.0.0.1:8000")
+                print(f"Base URL: {cls.base_url}")
+                # Esperar a que el servidor esté listo
+                cls._wait_for_server_ready(cls.base_url)
+                return
+            except Exception as e:
+                print(f"   ✗ Error al iniciar Edge con driver local: {str(e)[:100]}\n")
+
+        print("   ✗ No se encontró msedgedriver.exe en ninguna ubicación esperada\n")
+        print("[2/3] Intentando descargar msedgedriver automáticamente...")
+        
+        try:
+            edge_bin = EdgeChromiumDriverManager().install()
+            edge_service = EdgeService(edge_bin)
+            cls.driver = webdriver.Edge(service=edge_service, options=edge_options)
+            print("   ✓ Driver descargado e Edge iniciado correctamente\n")
+            cls.driver.implicitly_wait(10)
+            cls.base_url = os.environ.get("BASE_URL", "http://127.0.0.1:8000")
+            print(f"Base URL: {cls.base_url}")
+            cls._wait_for_server_ready(cls.base_url)
+            return
+        except Exception as download_err:
+            print(f"   ✗ Descarga automática falló (problema de red/DNS)\n")
+            
+        # Si llegamos aquí, nada funcionó
+        print("[3/3] DRIVER NO DISPONIBLE")
+        print("="*60)
+        print("\nSOLUCIÓN:")
+        print("-" * 60)
+        print("1. Ejecuta el script de ayuda:")
+        print("   download-drivers.cmd")
+        print("\n2. Sigue las instrucciones para descargar msedgedriver.exe")
+        print("\n3. Coloca el archivo en: C:\\msedgedriver\\msedgedriver.exe")
+        print("\n4. Vuelve a ejecutar los tests:")
+        print("   python tests\\test_crud.py")
+        print("="*60 + "\n")
+        
+        raise RuntimeError(
+            "\n\nNo se pudo iniciar ningún navegador. "
+            "Ejecuta 'download-drivers.cmd' para obtener instrucciones de descarga manual."
+        )
+        
+        # Nota: si llegamos aquí, ya se lanzó RuntimeError y no continuamos
+        
+    @classmethod
+    def tearDownClass(cls):
+        """Cerrar el driver después de todos los tests"""
+        cls.driver.quit()
+
+    @staticmethod
+    def _wait_for_server_ready(base_url: str, timeout: int = 30):
+        """Espera a que el servidor PHP responda en base_url antes de correr los tests."""
+        print("Comprobando disponibilidad del servidor PHP...")
+        deadline = time.time() + timeout
+        last_error = None
+        check_urls = ["/login.php", "/index.php", "/"]
+        while time.time() < deadline:
+            for path in check_urls:
+                try:
+                    with urllib.request.urlopen(base_url + path, timeout=3) as resp:
+                        if 200 <= resp.status < 500:
+                            print(f"Servidor disponible: {base_url}{path} -> {resp.status}")
+                            return
+                except Exception as e:
+                    last_error = e
+            time.sleep(1)
+
+        msg = (
+            "No se pudo conectar al servidor PHP en '" + base_url + "'.\n"
+            "Asegúrate de iniciar el servidor en otra ventana CMD:\n"
+            "  cd \"C:\\Users\\demia\\tarea 4\\Tarea-automatizacion\\src\"\n"
+            "  \"C:\\xampp\\php\\php.exe\" -S 127.0.0.1:8000\n\n"
+            "Si usas otro puerto/host, define BASE_URL antes de ejecutar los tests:\n"
+            "  set BASE_URL=http://127.0.0.1:8001\n"
+            "  python tests\\test_crud.py\n\n"
+            "Error de conexión: " + (str(last_error) if last_error else "desconocido")
+        )
+        raise RuntimeError(msg)
+    
+    def test_01_login_success(self):
+        """Test: Login exitoso con usuario válido"""
+        self.driver.get(f"{self.base_url}/login.php")
+        
+        # Llenar formulario de login
+        username_input = self.driver.find_element(By.NAME, "username")
+        password_input = self.driver.find_element(By.NAME, "password")
+        username_input.send_keys("test")
+        password_input.send_keys("test123")
+        
+        # Hacer clic en botón de login
+        login_button = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
+        login_button.click()
+        
+        # Verificar que se redirige a index.php
+        WebDriverWait(self.driver, 10).until(
+            EC.url_contains("index.php")
+        )
+        self.assertIn("index.php", self.driver.current_url)
+        print("✓ Login exitoso")
+    
+    def test_02_view_personajes(self):
+        """Test: Ver lista de personajes"""
+        self.driver.get(f"{self.base_url}/index.php")
+        
+        # Verificar que se cargó la tabla
+        table = WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "table.table"))
+        )
+        self.assertIsNotNone(table)
+        
+        # Contar filas (al menos una fila de datos)
+        rows = self.driver.find_elements(By.CSS_SELECTOR, "table tbody tr")
+        self.assertGreater(len(rows), 0, "Debe haber al menos un personaje")
+        print(f"✓ Se encontraron {len(rows)} personajes en la tabla")
+    
+    def test_03_agregar_personaje(self):
+        """Test: Agregar un nuevo personaje (CREATE)"""
+        self.driver.get(f"{self.base_url}/index.php")
+        
+        # Hacer clic en botón "Agregar Personaje"
+        agregar_button = self.driver.find_element(By.LINK_TEXT, "Agregar Personaje")
+        agregar_button.click()
+        
+        # Verificar que se abrió la página de agregar
+        WebDriverWait(self.driver, 10).until(
+            EC.url_contains("agregar.php")
+        )
+        
+        # Llenar formulario
+        nombre_input = self.driver.find_element(By.NAME, "nombre")
+        color_input = self.driver.find_element(By.NAME, "color")
+        tipo_input = self.driver.find_element(By.NAME, "tipo")
+        nivel_input = self.driver.find_element(By.NAME, "nivel")
+        foto_input = self.driver.find_element(By.NAME, "foto")
+        
+        nombre_input.send_keys("Skyler White")
+        color_input.send_keys("#9B59B6")
+        tipo_input.send_keys("Personaje Secundario")
+        nivel_input.clear()
+        nivel_input.send_keys("3")
+        foto_input.send_keys("https://via.placeholder.com/50?text=Skyler")
+        
+        # Hacer clic en botón Agregar
+        submit_button = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
+        submit_button.click()
+        
+        # Verificar que vuelve a index.php
+        WebDriverWait(self.driver, 10).until(
+            EC.url_contains("index.php")
+        )
+        print("✓ Personaje agregado exitosamente")
+    
+    def test_04_editar_personaje(self):
+        """Test: Editar un personaje (UPDATE)"""
+        self.driver.get(f"{self.base_url}/index.php")
+        
+        # Obtener el primer botón de editar
+        editar_buttons = self.driver.find_elements(By.LINK_TEXT, "✏️ Editar")
+        if editar_buttons:
+            editar_buttons[0].click()
+            
+            # Verificar que se abrió la página de editar
+            WebDriverWait(self.driver, 10).until(
+                EC.url_contains("editar.php")
+            )
+            
+            # Modificar el nombre
+            nombre_input = self.driver.find_element(By.NAME, "nombre")
+            nombre_input.clear()
+            nombre_input.send_keys("Personaje Actualizado")
+            
+            # Hacer clic en guardar
+            submit_button = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
+            submit_button.click()
+            
+            # Verificar que vuelve a index.php
+            WebDriverWait(self.driver, 10).until(
+                EC.url_contains("index.php")
+            )
+            print("✓ Personaje editado exitosamente")
+        else:
+            print("⚠ No hay personajes para editar")
+    
+    def test_05_eliminar_personaje(self):
+        """Test: Eliminar un personaje (DELETE)"""
+        self.driver.get(f"{self.base_url}/index.php")
+        
+        # Contar personajes antes de eliminar
+        rows_before = self.driver.find_elements(By.CSS_SELECTOR, "table tbody tr")
+        count_before = len(rows_before)
+        
+        # Obtener el último botón de eliminar
+        eliminar_buttons = self.driver.find_elements(By.LINK_TEXT, "🗑 Eliminar")
+        if eliminar_buttons:
+            # Haz clic en el último botón
+            eliminar_buttons[-1].click()
+            
+            # Esperar a que se procese la eliminación
+            time.sleep(2)
+            
+            # Verificar que la página se recargó
+            WebDriverWait(self.driver, 10).until(
+                EC.url_contains("index.php")
+            )
+            
+            # Contar personajes después de eliminar
+            rows_after = self.driver.find_elements(By.CSS_SELECTOR, "table tbody tr")
+            count_after = len(rows_after)
+            
+            self.assertLess(count_after, count_before, "Debe haber un personaje menos")
+            print(f"✓ Personaje eliminado exitosamente (antes: {count_before}, después: {count_after})")
+        else:
+            print("⚠ No hay personajes para eliminar")
+    
+    def test_06_logout(self):
+        """Test: Cerrar sesión"""
+        self.driver.get(f"{self.base_url}/index.php")
+        
+        # Hacer clic en botón "Cerrar sesión"
+        logout_button = self.driver.find_element(By.LINK_TEXT, "Cerrar sesión")
+        logout_button.click()
+        
+        # Verificar que se redirige a login.php
+        WebDriverWait(self.driver, 10).until(
+            EC.url_contains("login.php")
+        )
+        self.assertIn("login.php", self.driver.current_url)
+        print("✓ Logout exitoso")
+
+if __name__ == "__main__":
+    # Ejecutar los tests
+    unittest.main(verbosity=2)

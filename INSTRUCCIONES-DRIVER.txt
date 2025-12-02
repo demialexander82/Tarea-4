@@ -1,0 +1,64 @@
+========================================
+INSTRUCCIONES PARA DESCARGAR MSEDGEDRIVER
+========================================
+
+TU VERSION DE EDGE: 142.0.3595.94
+
+PASOS A SEGUIR:
+
+1. Abre Microsoft Edge (tu navegador)
+
+2. Copia y pega esta URL en la barra de direcciones:
+   https://developer.microsoft.com/en-us/microsoft-edge/tools/webdriver/
+
+3. En la página, busca la sección "Downloads" o "Descargas"
+
+4. Busca la versión 142 (o la más cercana a 142.0.3595.94)
+
+5. Descarga el archivo para:
+   - Platform: Windows
+   - Architecture: x64 (64-bit)
+   
+   El archivo se llamará algo como: edgedriver_win64.zip
+
+6. Una vez descargado:
+   - Ve a tu carpeta de Descargas
+   - Haz clic derecho en edgedriver_win64.zip
+   - Selecciona "Extraer todo..." o "Extract All..."
+   - Extrae los archivos
+
+7. Dentro del archivo extraído encontrarás: msedgedriver.exe
+
+8. Copia msedgedriver.exe a: C:\msedgedriver\
+
+9. Para verificar que está en el lugar correcto, abre cmd y ejecuta:
+   dir C:\msedgedriver\msedgedriver.exe
+
+   Deberías ver el archivo listado.
+
+10. Verifica la versión del driver:
+    C:\msedgedriver\msedgedriver.exe --version
+
+11. Finalmente, ejecuta los tests:
+    cd "C:\Users\demia\tarea 4\Tarea-automatizacion"
+    python tests\test_crud.py
+
+========================================
+
+ALTERNATIVA - LINK DIRECTO:
+
+Si prefieres un link directo, intenta copiar esta URL completa en tu navegador:
+
+https://msedgedriver.azureedge.net/142.0.3595.94/edgedriver_win64.zip
+
+Esto descargará directamente el archivo ZIP.
+
+========================================
+
+PROBLEMAS COMUNES:
+
+- Si el navegador bloquea la descarga, haz clic en "Mantener" o "Keep"
+- Si Windows SmartScreen aparece, haz clic en "Más información" y luego "Ejecutar de todas formas"
+- El archivo msedgedriver.exe debe estar directamente en C:\msedgedriver\ (no en una subcarpeta)
+
+========================================
